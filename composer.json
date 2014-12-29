@@ -1,0 +1,27 @@
+{
+    "name": "artursvonda/composer-updates",
+    "description": "Plugin for composer dependency updates and change-logs",
+    "license": "MIT",
+    "type": "composer-plugin",
+    "authors": [
+        {
+            "name": "Arturs Vonda",
+            "email": "arturs@artursvonda.lv"
+        }
+    ],
+    "minimum-stability": "stable",
+    "require": {
+        "composer-plugin-api": "1.0.0"
+    },
+    "require-dev": {
+        "composer/composer": "1.*@dev"
+    },
+    "extra": {
+        "class": "ComposerUpdates\\ComposerUpdatesPlugin"
+    },
+    "autoload": {
+        "psr-0": {
+            "": "src/"
+        }
+    }
+}
