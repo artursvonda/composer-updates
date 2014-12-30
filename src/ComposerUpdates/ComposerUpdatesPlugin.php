@@ -7,6 +7,8 @@ use Composer\DependencyResolver\Pool;
 use Composer\EventDispatcher\EventSubscriberInterface;
 use Composer\IO\IOInterface;
 use Composer\Package\Link;
+use Composer\Package\PackageInterface;
+use Composer\Repository\PlatformRepository;
 use Composer\Script\CommandEvent;
 use Composer\Plugin\PluginInterface;
 
@@ -52,13 +54,17 @@ class ComposerUpdatesPlugin implements PluginInterface, EventSubscriberInterface
         $output->write('');
         $output->write('Checking for available updates');
 
+        $platformRepo = new PlatformRepository();
+
         $globalPool = new Pool($root->getMinimumStability(), $root->getStabilityFlags());
+        $globalPool->addRepository($platformRepo);
         foreach ($repoManager->getRepositories() as $repo) {
             $globalPool->addRepository($repo);
         }
 
         $localPool = new Pool($root->getMinimumStability(), $root->getStabilityFlags());
         $localRepo = $repoManager->getLocalRepository();
+        $localPool->addRepository($platformRepo);
         if ($localRepo) {
             $localPool->addRepository($repoManager->getLocalRepository());
         } else {
@@ -71,6 +77,7 @@ class ComposerUpdatesPlugin implements PluginInterface, EventSubscriberInterface
             $constraint      = $require->getConstraint();
             $packagesCurrent = $localPool->whatProvides($require->getTarget(), $constraint, true);
             if (!$packagesCurrent) {
+                $output->write(sprintf('  - <info>%s</info> package not found', $require->getTarget()));
                 continue;
             }
             $packageCurrent = $packagesCurrent ? $packagesCurrent[0] : null;
@@ -80,6 +87,7 @@ class ComposerUpdatesPlugin implements PluginInterface, EventSubscriberInterface
                 $output->write('Did not find global package (constrained) ' . $require->getTarget());
                 continue;
             }
+            /** @var PackageInterface $packageConstrained */
             $packageConstrained = end($packagesConstrained);
 
             $packagesLatest = $globalPool->whatProvides($require->getTarget(), null, true);
@@ -87,14 +95,19 @@ class ComposerUpdatesPlugin implements PluginInterface, EventSubscriberInterface
                 $output->write('Did not find global package (un-constrained)' . $require->getTarget());
                 continue;
             }
+            /** @var PackageInterface $packageLatest */
             $packageLatest = end($packagesLatest);
 
             $toConstrained = version_compare($packageCurrent->getVersion(), $packageConstrained->getVersion());
             $toLatest      = version_compare($packageConstrained->getVersion(), $packageLatest->getVersion());
 
+            if ($toConstrained > 0 && $toLatest > 0) {
+                continue;
+            }
+
             if (!$toConstrained && !$toLatest && $this->io->isVeryVerbose()) {
                 $output->write(sprintf(
-                    '  - %s @ %s is currently at max version: %s',
+                    '  - <info>%s %s</info> is currently at max version (<comment>%s</comment>)',
                     $require->getTarget(),
                     $constraint->getPrettyString(),
                     $packageCurrent->getPrettyVersion()
@@ -117,10 +130,6 @@ class ComposerUpdatesPlugin implements PluginInterface, EventSubscriberInterface
                         $packageCurrent->getPrettyVersion(),
                         $packageLatest->getPrettyVersion()
                     ));
-                }
-
-                if ($toConstrained > 0 && $toLatest > 0) {
-                    continue;
                 }
             }
         }

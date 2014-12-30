@@ -17,7 +17,10 @@
         "composer/composer": "1.*@dev"
     },
     "extra": {
-        "class": "ComposerUpdates\\ComposerUpdatesPlugin"
+        "class": "ComposerUpdates\\ComposerUpdatesPlugin",
+        "branch-alias": {
+            "dev-master": "0.1-dev"
+        }
     },
     "autoload": {
         "psr-0": {
