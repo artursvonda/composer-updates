@@ -80,25 +80,37 @@ class ComposerUpdatesPlugin implements PluginInterface, EventSubscriberInterface
             $constraint = $require->getConstraint();
             $packagesCurrent = $localPool->whatProvides($require->getTarget(), $constraint, $mustMatchName = true);
             if (!$packagesCurrent) {
-                $output->write(sprintf('  - <info>%s</info> package not found', $require->getTarget()));
+                $output->write(sprintf('<fg=red>!!!</> <info>%s</info> package not found', $require->getTarget()));
                 continue;
             }
             $packageCurrent = $packagesCurrent ? $packagesCurrent[0] : null;
 
             $packagesConstrained = $globalPool->whatProvides($require->getTarget(), $constraint, $mustMatchName = true);
             if (!$packagesConstrained) {
-                $output->write('Did not find global package (constrained) ' . $require->getTarget());
+                $output->write(
+                    sprintf(
+                        '<fg=red>!!!</> <info>%s</info> global package not found (constrained)',
+                        $require->getTarget()
+                    )
+                );
                 continue;
             }
-            /** @var PackageInterface $packageConstrained */
+
+            $this->sortPackages($packagesConstrained);
             $packageConstrained = end($packagesConstrained);
 
             $packagesLatest = $globalPool->whatProvides($require->getTarget(), null, $mustMatchName = true);
             if (!$packagesLatest) {
-                $output->write('Did not find global package (un-constrained)' . $require->getTarget());
+                $output->write(
+                    sprintf(
+                        '<fg=red>!!!</> <info>%s</info> global package not found (un-constrained)',
+                        $require->getTarget()
+                    )
+                );
                 continue;
             }
-            /** @var PackageInterface $packageLatest */
+
+            $this->sortPackages($packagesLatest);
             $packageLatest = end($packagesLatest);
 
             $requiredVersion = $constraint->getPrettyString();
@@ -155,5 +167,18 @@ class ComposerUpdatesPlugin implements PluginInterface, EventSubscriberInterface
     private function wrapColor($text, $color)
     {
         return sprintf('<fg=%s>%-10s</>', $color, $text);
+    }
+
+    /**
+     * @param PackageInterface[] $packages
+     */
+    private function sortPackages(&$packages)
+    {
+        usort(
+            $packages,
+            function (PackageInterface $a, PackageInterface $b) {
+                return version_compare($a->getVersion(), $b->getVersion());
+            }
+        );
     }
 }
