@@ -8,9 +8,9 @@ use Composer\EventDispatcher\EventSubscriberInterface;
 use Composer\IO\IOInterface;
 use Composer\Package\Link;
 use Composer\Package\PackageInterface;
-use Composer\Repository\PlatformRepository;
-use Composer\Script\CommandEvent;
 use Composer\Plugin\PluginInterface;
+use Composer\Repository\PlatformRepository;
+use Composer\Script\Event;
 
 class ComposerUpdatesPlugin implements PluginInterface, EventSubscriberInterface
 {
@@ -18,7 +18,6 @@ class ComposerUpdatesPlugin implements PluginInterface, EventSubscriberInterface
      * @var Composer
      */
     private $composer;
-
     /**
      * @var IOInterface
      */
@@ -30,7 +29,7 @@ class ComposerUpdatesPlugin implements PluginInterface, EventSubscriberInterface
     public function activate(Composer $composer, IOInterface $io)
     {
         $this->composer = $composer;
-        $this->io       = $io;
+        $this->io = $io;
     }
 
     /**
@@ -39,16 +38,16 @@ class ComposerUpdatesPlugin implements PluginInterface, EventSubscriberInterface
     public static function getSubscribedEvents()
     {
         return array(
-            'check-updates'  => array(
+            'check-updates' => array(
                 array('checkUpdates', 0),
             ),
         );
     }
 
-    public function checkUpdates(CommandEvent $event)
+    public function checkUpdates(Event $event)
     {
-        $root        = $this->composer->getPackage();
-        $output      = $event->getIO();
+        $root = $this->composer->getPackage();
+        $output = $event->getIO();
         $repoManager = $this->composer->getRepositoryManager();
 
         $output->write('');
@@ -73,16 +72,20 @@ class ComposerUpdatesPlugin implements PluginInterface, EventSubscriberInterface
             }
         }
 
+        $output->write(str_repeat('-', 80));
+        $this->writeRow($output, 'Package', 'Require', 'Current', 'Update', 'Latest', $color = false);
+        $output->write(str_repeat('-', 80));
+
         foreach ($this->getRequires() as $require) {
-            $constraint      = $require->getConstraint();
-            $packagesCurrent = $localPool->whatProvides($require->getTarget(), $constraint, true);
+            $constraint = $require->getConstraint();
+            $packagesCurrent = $localPool->whatProvides($require->getTarget(), $constraint, $mustMatchName = true);
             if (!$packagesCurrent) {
                 $output->write(sprintf('  - <info>%s</info> package not found', $require->getTarget()));
                 continue;
             }
             $packageCurrent = $packagesCurrent ? $packagesCurrent[0] : null;
 
-            $packagesConstrained = $globalPool->whatProvides($require->getTarget(), $constraint, true);
+            $packagesConstrained = $globalPool->whatProvides($require->getTarget(), $constraint, $mustMatchName = true);
             if (!$packagesConstrained) {
                 $output->write('Did not find global package (constrained) ' . $require->getTarget());
                 continue;
@@ -90,7 +93,7 @@ class ComposerUpdatesPlugin implements PluginInterface, EventSubscriberInterface
             /** @var PackageInterface $packageConstrained */
             $packageConstrained = end($packagesConstrained);
 
-            $packagesLatest = $globalPool->whatProvides($require->getTarget(), null, true);
+            $packagesLatest = $globalPool->whatProvides($require->getTarget(), null, $mustMatchName = true);
             if (!$packagesLatest) {
                 $output->write('Did not find global package (un-constrained)' . $require->getTarget());
                 continue;
@@ -98,40 +101,25 @@ class ComposerUpdatesPlugin implements PluginInterface, EventSubscriberInterface
             /** @var PackageInterface $packageLatest */
             $packageLatest = end($packagesLatest);
 
-            $toConstrained = version_compare($packageCurrent->getVersion(), $packageConstrained->getVersion());
-            $toLatest      = version_compare($packageConstrained->getVersion(), $packageLatest->getVersion());
+            $requiredVersion = $constraint->getPrettyString();
+            $currentVersion = $packageCurrent->getPrettyVersion();
+            $constrainedVersion = $packageConstrained->getPrettyVersion();
+            $latestVersion = $packageLatest->getPrettyVersion();
 
-            if ($toConstrained > 0 && $toLatest > 0) {
-                continue;
+            if ($packageCurrent->isDev()) {
+                $currentVersion = substr($packageCurrent->getDistReference(), 0, 10);
+                $constrainedVersion = substr($packageConstrained->getDistReference(), 0, 10);
+                $latestVersion = substr($packageLatest->getDistReference(), 0, 10);
             }
 
-            if (!$toConstrained && !$toLatest && $this->io->isVeryVerbose()) {
-                $output->write(sprintf(
-                    '  - <info>%s %s</info> is currently at max version (<comment>%s</comment>)',
-                    $require->getTarget(),
-                    $constraint->getPrettyString(),
-                    $packageCurrent->getPrettyVersion()
-                ));
-            } else {
-                if ($toConstrained < 0) {
-                    $output->write(sprintf(
-                        '  - <info>%s %s</info> has update available (<comment>%s</comment> => <comment>%s</comment>)',
-                        $require->getTarget(),
-                        $constraint->getPrettyString(),
-                        $packageCurrent->getPrettyVersion(),
-                        $packageConstrained->getPrettyVersion()
-                    ));
-                }
-
-                if ($toLatest < 0) {
-                    $output->write(sprintf(
-                        '  - <info>%s</info> has upgrade available (<comment>%s</comment> => <comment>%s</comment>)',
-                        $require->getTarget(),
-                        $packageCurrent->getPrettyVersion(),
-                        $packageLatest->getPrettyVersion()
-                    ));
-                }
-            }
+            $this->writeRow(
+                $output,
+                $require->getTarget(),
+                $requiredVersion,
+                $currentVersion,
+                $constrainedVersion,
+                $latestVersion
+            );
         }
 
         $output->write('');
@@ -143,5 +131,29 @@ class ComposerUpdatesPlugin implements PluginInterface, EventSubscriberInterface
     private function getRequires()
     {
         return $this->composer->getPackage()->getRequires();
+    }
+
+    private function writeRow(IOInterface $output, $package, $required, $current, $update, $latest, $color = true)
+    {
+        $isLatest = $current === $latest;
+        $isUpdated = $current === $update;
+        $update = $color ? $this->wrapColor($update, $isUpdated ? 'green' : 'red') : $update;
+        $latest = $color ? $this->wrapColor($latest, $isLatest ? 'green' : 'red') : $latest;
+
+        $output->write(
+            sprintf(
+                '%-30s | %-10s | %-10s | %-10s | %-10s',
+                substr($package, 0, 30),
+                $required,
+                $current,
+                $update,
+                $latest
+            )
+        );
+    }
+
+    private function wrapColor($text, $color)
+    {
+        return sprintf('<fg=%s>%-10s</>', $color, $text);
     }
 }
