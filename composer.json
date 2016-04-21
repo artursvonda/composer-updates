@@ -11,7 +11,7 @@
     ],
     "minimum-stability": "stable",
     "require": {
-        "composer-plugin-api": "1.0.0"
+        "composer-plugin-api": "^1.0.0"
     },
     "require-dev": {
         "composer/composer": "1.*@dev"
@@ -19,12 +19,12 @@
     "extra": {
         "class": "ComposerUpdates\\ComposerUpdatesPlugin",
         "branch-alias": {
-            "dev-master": "0.1-dev"
+            "dev-master": "0.2-dev"
         }
     },
     "autoload": {
-        "psr-0": {
-            "": "src/"
+        "psr-4": {
+            "ComposerUpdates\\": "src/ComposerUpdates/"
         }
     }
 }
