@@ -3,6 +3,8 @@ composer-updates
 
 Composer plugin to check for available updates and upgrades
 
+![Screenshot](http://i.imgur.com/xMbceYe.png)
+
 Usage
 -----
 
